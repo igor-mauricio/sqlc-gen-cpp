@@ -7,18 +7,15 @@ https://github.com/AugustNagro/magnum?tab=readme-ov-file
 {{- /*                          TYPE CONVERSION                      */ -}}
 
 {{- define "CppType" -}}
-{{- $cppType := .Type.Name -}}
-{{- if eq (upper .Type.Name) "INTEGER"}}{{ $cppType = "int" }}
-{{- else if eq (upper .Type.Name) "TEXT"}}{{ $cppType = "std::string" }}
-{{- else if eq (upper .Type.Name) "BLOB"}}{{ $cppType = "std::vector<uint8_t>" }}
-{{- else if eq (upper .Type.Name) "REAL"}}{{ $cppType = "double" }}
+    {{- $cppType := .Type.Name -}}
+    {{- if eq (upper .Type.Name) "INTEGER"}}{{ $cppType = "int" }}
+    {{- else if eq (upper .Type.Name) "TEXT"}}{{ $cppType = "std::string" }}
+    {{- else if eq (upper .Type.Name) "BLOB"}}{{ $cppType = "std::vector<uint8_t>" }}
+    {{- else if eq (upper .Type.Name) "REAL"}}{{ $cppType = "double" }}
+    {{- end -}}
+    {{- $cppType }}
 {{- end -}}
-{{- $cppType }}
-{{- end -}}
-{{- /*                          SCHEMA                      */ -}}
-{{- define "schema" -}}
-CREATE TABLE IF NOT EXISTS post (id INTEGER PRIMARY KEY, title TEXT, content TEXT, parent_id INTEGER);
-{{- end -}}
+
 {{- /*                          IMPORTS                      */ -}}
 #include <sqlite3.h>
 #include <SPIFFS.h>
@@ -28,7 +25,7 @@ CREATE TABLE IF NOT EXISTS post (id INTEGER PRIMARY KEY, title TEXT, content TEX
 
 #define FORMAT_SPIFFS_IF_FAILED true
 
-namespace repo {{"{"}}
+namespace repo {
 
     static sqlite3 *db = nullptr;
     static int err = 0;
@@ -59,69 +56,65 @@ namespace repo {{"{"}}
             Serial.printf("error code: %d\n", err);
             return;
         }
-    {{"}\n"}}
+    }
+    {{""}}
 
+{{- /*                          QUERIES                      */ -}}
 {{- range .Queries }}
+
+{{- /*                          COMMENTS                      */ -}}
 {{- range .Comments}}// {{.}}
 {{- end}}
 {{- $rowType := printf "%sParams" .Name -}}
 {{- if or (eq .Cmd ":many") (eq .Cmd ":one") }}
-  {{- if gt (len .Columns) 1 -}}
-{{"\n\ttypedef struct {"}}
-{{- range .Columns}}
-    {{"\t"}}
-    {{- if not .NotNull }}std::optional<{{end}}
-    {{- template "CppType" .}}
-    {{- if not .NotNull }}>{{end}} {{.Name}};
-{{- end}}
-{{"\t}"}} {{ $rowType }};
-  {{- else -}}
-    {{"\n\ttypedef "}}
-    {{- if not (index .Columns 0).NotNull }}Option[{{end}}
-    {{- template "CppType" (index .Columns 0) }}
-    {{- if not (index .Columns 0).NotNull }}]{{end}}{{" "}}{{ $rowType }};
+  {{- if gt (len .Columns) 1 }}
+    {{ "typedef struct {" }}
+    {{- range .Columns }}
+        {{ if not .NotNull }}std::optional<{{end}}{{- template "CppType" . }}{{ if not .NotNull }}>{{end}} {{.Name}};
+    {{- end}}
+    } {{ $rowType }};
+  {{- else }}
+    {{"typedef "}}{{- if not (index .Columns 0).NotNull }}Option[{{end}}{{- template "CppType" (index .Columns 0) }}{{- if not (index .Columns 0).NotNull }}]{{end}}{{" "}}{{ $rowType }};
   {{- end}}
 
 {{end}}
+
 {{- /*                          RETURN TYPE                      */ -}}
 {{- $returnType := "__DEFAULT__" -}}
 {{- if eq .Cmd ":exec" }}
-  {{- $returnType = "void" -}}
+    {{- $returnType = "void" -}}
 {{- else if eq .Cmd ":many" }}
-  {{- $returnType = printf "std::vector<%s>" $rowType -}}
+    {{- $returnType = printf "std::vector<%s>" $rowType -}}
 {{- else if eq .Cmd ":one" }}
-  {{- $returnType = $rowType -}}
+    {{- $returnType = $rowType -}}
 {{- else -}}
-  {{- $returnType = "__UNKNOWN_QUERY_ANNOTATION__" -}}
+    {{- $returnType = "__UNKNOWN_QUERY_ANNOTATION__" -}}
 {{- end -}}
 
 {{- /*                          FUNCTION PARAMETERS 0                      */ -}}
 
 {{- if eq (len .Params) 0 -}}
-{{"\t"}}{{ $returnType }} {{.Name}}(){
+    {{"\t"}}{{ $returnType }} {{.Name}}(){
+
 {{- /*                          FUNCTION PARAMETERS 1                      */ -}}
 {{- else if eq (len .Params) 1 -}}
-{{"\t"}}{{ $returnType }} {{.Name}}(
-{{- range $i, $p := .Params -}}
+    {{"\t"}}{{ $returnType }} {{.Name}}({{- range $i, $p := .Params -}}{{template "CppType" .Column}} {{.Column.Name}} {{- end -}}){
 
-{{template "CppType" .Column}} {{.Column.Name}}
-{{- end -}}){
 {{- /*                          FUNCTION PARAMETERS 2+                      */ -}}
 {{- else -}}
-{{$first := true}}
-{{"\t"}}{{ $returnType }} {{.Name}}(
-{{- range $i, $p := .Params -}}
-
-{{if $first}}{{$first = false}}{{else}},{{end}}
-{{"\t\t"}}{{ if not $p.Column.NotNull }}std::optional<{{end}}
+    {{$first := true}}
+    {{ $returnType }} {{.Name}}(
+    {{- range $i, $p := .Params -}}
+    {{if $first}}{{$first = false}}{{else}},{{end}}
+        {{ if not $p.Column.NotNull }}std::optional<{{end}}
 {{- template "CppType" .Column}}
 {{- if not $p.Column.NotNull }}>{{end}} {{.Column.Name}}
-
-
 {{- end -}}
 {{"\n\t"}}){
 {{- end -}}
+
 {{- /*                          END OF FUNCTION PARAMETERS                      */ -}}
+
 {{- /*                          INITIALIZE STATEMENT                      */ -}}
         {{""}}
         std::string sql = "{{ oneLineSQL .Text }}";
@@ -131,6 +124,7 @@ namespace repo {{"{"}}
             Serial.printf("SQL error: %s\n", sqlite3_errmsg(db));
             return;
         }
+
 {{- /*                          END INITIALIZATION                      */ -}}
 {{- /*                          PARSE PARAMETERS                      */ -}}
 {{- range  $i, $p := .Params -}}
@@ -179,6 +173,7 @@ namespace repo {{"{"}}
             {{- if not $c.NotNull }}
             if (sqlite3_column_type(stmt, {{ $i }}) != SQLITE_NULL) {
             {{- end }}
+
 {{- /*                          CONSTRUCT VARIABLE TYPES                      */ -}}
             {{- if eq (upper $c.Type.Name) "INTEGER" }}
             {{ $result }} = sqlite3_column_int(stmt, {{ $i }});
@@ -199,6 +194,7 @@ namespace repo {{"{"}}
         }
         sqlite3_finalize(stmt);
         return result;{{end}}
+
 {{- /*                          CONSTRUCT EXEC                      */ -}}
 {{- if eq .Cmd ":exec" }}
         err = sqlite3_step(stmt);
@@ -207,6 +203,7 @@ namespace repo {{"{"}}
             return;
         }
         sqlite3_finalize(stmt);{{end}}
+
 {{- /*                          END RESULT                      */ -}}
 {{- /*                          END OF FUNCTION                      */ -}}
     {{"\n\t}\n"}}

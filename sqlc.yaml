@@ -5,8 +5,8 @@ plugins:
       cmd: ./sqlc-gen-from-template # https://github.com/fdietze/sqlc-gen-from-template
 sql:
   - engine: "sqlite"
-    queries: "sqlc/queries.sql"
-    schema: "sqlc/schema.sql"
+    queries: "sqlc/queries"
+    schema: "sqlc/schema"
     codegen:
       - out: generated
         plugin: sqlc-gen-from-template

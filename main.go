@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"text/template"
@@ -55,7 +56,6 @@ func generate(ctx context.Context, req *plugin.GenerateRequest) (*plugin.Generat
 			// Remove inline comments (e.g., "-- comment")
 			re := regexp.MustCompile(`--.*`)
 			withoutComments := re.ReplaceAllString(s, "")
-
 			// Replace newlines and extra spaces with a single space
 			cleaned := strings.ReplaceAll(withoutComments, "\n", " ")
 			cleaned = strings.Join(strings.Fields(cleaned), " ") // Removes extra spaces
@@ -65,16 +65,34 @@ func generate(ctx context.Context, req *plugin.GenerateRequest) (*plugin.Generat
 
 		"schema": func() string {
 			schema := ""
-			for _, schemaFile := range req.Settings.Schema {
-				file, err := os.Open(schemaFile)
+			for _, schemaPath := range req.Settings.Schema {
+				fileInfo, err := os.Stat(schemaPath)
 				if err != nil {
-					log.Fatalf("Error opening schema file: %v", err)
+					log.Fatalf("Error accessing schema path: %v", err)
 				}
-				defer file.Close()
-
-				buf := new(bytes.Buffer)
-				buf.ReadFrom(file)
-				schema += buf.String() + "\n"
+				if !fileInfo.IsDir() {
+					content, err := readFile(schemaPath)
+					if err != nil {
+						log.Fatalf("Error reading file %s: %v", schemaPath, err)
+					}
+					schema += content + "\n"
+					continue
+				}
+				files, err := os.ReadDir(schemaPath)
+				if err != nil {
+					log.Fatalf("Error reading directory: %v", err)
+				}
+				for _, file := range files {
+					if file.IsDir() { // Skip subdirectories
+						continue
+					}
+					filePath := filepath.Join(schemaPath, file.Name())
+					content, err := readFile(filePath)
+					if err != nil {
+						log.Fatalf("Error reading file %s: %v", filePath, err)
+					}
+					schema += content + "\n"
+				}
 			}
 			return schema
 		},
@@ -111,4 +129,19 @@ func generate(ctx context.Context, req *plugin.GenerateRequest) (*plugin.Generat
 	})
 
 	return &resp, nil
+}
+
+func readFile(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	buf := new(bytes.Buffer)
+	_, err = buf.ReadFrom(file)
+	if err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
