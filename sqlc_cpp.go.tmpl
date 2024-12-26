@@ -10,6 +10,8 @@ https://github.com/AugustNagro/magnum?tab=readme-ov-file
 {{- $cppType := .Type.Name -}}
 {{- if eq (upper .Type.Name) "INTEGER"}}{{ $cppType = "int" }}
 {{- else if eq (upper .Type.Name) "TEXT"}}{{ $cppType = "std::string" }}
+{{- else if eq (upper .Type.Name) "BLOB"}}{{ $cppType = "std::vector<uint8_t>" }}
+{{- else if eq (upper .Type.Name) "REAL"}}{{ $cppType = "double" }}
 {{- end -}}
 {{- $cppType }}
 {{- end -}}
@@ -62,7 +64,7 @@ namespace repo {{"{"}}
 {{- range .Queries }}
 {{- range .Comments}}// {{.}}
 {{- end}}
-{{- $rowType := printf "Row_%s" .Name -}}
+{{- $rowType := printf "%sParams" .Name -}}
 {{- if or (eq .Cmd ":many") (eq .Cmd ":one") }}
   {{- if gt (len .Columns) 1 -}}
 {{"\n\ttypedef struct {"}}
@@ -137,6 +139,10 @@ namespace repo {{"{"}}
         err = sqlite3_bind_int(stmt, {{add $i 1}}, {{ $p.Column.Name }});
         {{- else if eq (upper $p.Column.Type.Name) "TEXT" -}}
         err = sqlite3_bind_text(stmt, {{add $i 1}}, {{ $p.Column.Name }}.c_str(), -1, SQLITE_STATIC);
+        {{- else if eq (upper $p.Column.Type.Name) "BLOB" -}}
+        err = sqlite3_bind_blob(stmt, {{add $i 1}}, {{ $p.Column.Name }}.data(), {{ $p.Column.Name }}.size(), SQLITE_STATIC);
+        {{- else if eq (upper $p.Column.Type.Name) "REAL" -}}
+        err = sqlite3_bind_double(stmt, {{add $i 1}}, {{ $p.Column.Name }});
         {{- end -}}
         {{""}}
         if (err != SQLITE_OK) {
@@ -178,6 +184,10 @@ namespace repo {{"{"}}
             {{ $result }} = sqlite3_column_int(stmt, {{ $i }});
             {{- else if eq (upper $c.Type.Name) "TEXT" }}
             {{ $result }} = std::string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, {{ $i }})));
+            {{- else if eq (upper $c.Type.Name) "BLOB" }}
+            {{ $result }} = std::vector<uint8_t>(sqlite3_column_blob(stmt, {{ $i }}), sqlite3_column_blob(stmt, {{ $i }}) + sqlite3_column_bytes(stmt, {{ $i }}));
+            {{- else if eq (upper $c.Type.Name) "REAL" }}
+            {{ $result }} = sqlite3_column_double(stmt, {{ $i }});
             {{- end }}
             {{- if not $c.NotNull }}
             }
