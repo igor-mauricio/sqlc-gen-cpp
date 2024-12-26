@@ -11,6 +11,6 @@ sql:
       - out: generated
         plugin: sqlc-gen-from-template
         options:
-          template: "sqlc_cpp.go.tmpl"
-          filename: "Queries.h"
+          template: "templates"
+          # filename: "Queries.h"
           # optional formatter command to format generated code
