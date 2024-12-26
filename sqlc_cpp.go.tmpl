@@ -102,6 +102,7 @@ namespace repo {{"{"}}
 {{- else if eq (len .Params) 1 -}}
 {{"\t"}}{{ $returnType }} {{.Name}}(
 {{- range $i, $p := .Params -}}
+
 {{template "CppType" .Column}} {{.Column.Name}}
 {{- end -}}){
 {{- /*                          FUNCTION PARAMETERS 2+                      */ -}}
@@ -109,8 +110,13 @@ namespace repo {{"{"}}
 {{$first := true}}
 {{"\t"}}{{ $returnType }} {{.Name}}(
 {{- range $i, $p := .Params -}}
+
 {{if $first}}{{$first = false}}{{else}},{{end}}
-{{"\t\t"}}{{template "CppType" .Column}} {{.Column.Name}}
+{{"\t\t"}}{{ if not $p.Column.NotNull }}std::optional<{{end}}
+{{- template "CppType" .Column}}
+{{- if not $p.Column.NotNull }}>{{end}} {{.Column.Name}}
+
+
 {{- end -}}
 {{"\n\t"}}){
 {{- end -}}
