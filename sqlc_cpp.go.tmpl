@@ -1,0 +1,199 @@
+{{- /*
+https://pkg.go.dev/text/template
+https://github.com/sqlc-dev/sqlc/blob/main/protos/plugin/codegen.proto
+https://github.com/AugustNagro/magnum?tab=readme-ov-file
+*/ -}}
+
+{{- /*                          TYPE CONVERSION                      */ -}}
+
+{{- define "CppType" -}}
+{{- $cppType := .Type.Name -}}
+{{- if eq .Type.Name "integer"}}{{ $cppType = "int" }}
+{{- else if eq .Type.Name "text"}}{{ $cppType = "std::string" }}
+{{- end -}}
+{{- $cppType }}
+{{- end -}}
+{{- /*                          SCHEMA                      */ -}}
+{{- define "schema" -}}
+CREATE TABLE IF NOT EXISTS post (id INTEGER PRIMARY KEY, title TEXT, content TEXT, parent_id INTEGER);
+{{- end -}}
+{{- /*                          IMPORTS                      */ -}}
+#include <sqlite3.h>
+#include <SPIFFS.h>
+#include <map>
+#include <string>
+#include <vector>
+#include <optional>
+
+#define FORMAT_SPIFFS_IF_FAILED true
+
+namespace repo {{"{"}}
+
+    static sqlite3 *db = nullptr;
+    static int err = 0;
+
+{{- /*                          INIT DATABASE                      */ -}}
+    {{"\n"}}
+    void open(std::string filename) {
+        if (!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)) {
+            Serial.println("Failed to mount file system");
+            return;
+        }
+        SPIFFS.remove("/test1.db");
+
+        sqlite3_initialize();
+        err = sqlite3_open(filename.c_str(), &db);
+        if (err) {
+            Serial.printf("Can't open database: %s\n", sqlite3_errmsg(db));
+            return;
+        }
+        Serial.println("Opened database successfully");
+
+        std::string sql = "{{template "schema" .}}";
+        char *errmsg;
+        err = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errmsg);
+        if (err != SQLITE_OK) {
+            Serial.printf("SQL error: %s\n", sqlite3_errmsg(db));
+            Serial.printf("error message: %s\n", errmsg);
+            Serial.printf("error code: %d\n", err);
+            return;
+        }
+    {{"}\n"}}
+
+{{- range .Queries }}
+{{- range .Comments}}// {{.}}
+{{- end}}
+{{- $rowType := printf "Row_%s" .Name -}}
+{{- if or (eq .Cmd ":many") (eq .Cmd ":one") }}
+  {{- if gt (len .Columns) 1 -}}
+{{"\n\ttypedef struct {"}}
+{{- range .Columns}}
+    {{"\t"}}
+    {{- if not .NotNull }}std::optional<{{end}}
+    {{- template "CppType" .}}
+    {{- if not .NotNull }}>{{end}} {{.Name}};
+{{- end}}
+{{"\t}"}} {{ $rowType }};
+  {{- else -}}
+    {{"\n\ttypedef "}}
+    {{- if not (index .Columns 0).NotNull }}Option[{{end}}
+    {{- template "CppType" (index .Columns 0) }}
+    {{- if not (index .Columns 0).NotNull }}]{{end}}{{" "}}{{ $rowType }};
+  {{- end}}
+
+{{end}}
+{{- /*                          RETURN TYPE                      */ -}}
+{{- $returnType := "__DEFAULT__" -}}
+{{- if eq .Cmd ":exec" }}
+  {{- $returnType = "void" -}}
+{{- else if eq .Cmd ":many" }}
+  {{- $returnType = printf "std::vector<%s>" $rowType -}}
+{{- else if eq .Cmd ":one" }}
+  {{- $returnType = $rowType -}}
+{{- else -}}
+  {{- $returnType = "__UNKNOWN_QUERY_ANNOTATION__" -}}
+{{- end -}}
+
+{{- /*                          FUNCTION PARAMETERS 0                      */ -}}
+
+{{- if eq (len .Params) 0 -}}
+{{"\t"}}{{ $returnType }} {{.Name}}(){
+{{- /*                          FUNCTION PARAMETERS 1                      */ -}}
+{{- else if eq (len .Params) 1 -}}
+{{"\t"}}{{ $returnType }} {{.Name}}(
+{{- range $i, $p := .Params -}}
+{{template "CppType" .Column}} {{.Column.Name}}
+{{- end -}}){
+{{- /*                          FUNCTION PARAMETERS 2+                      */ -}}
+{{- else -}}
+{{$first := true}}
+{{"\t"}}{{ $returnType }} {{.Name}}(
+{{- range $i, $p := .Params -}}
+{{if $first}}{{$first = false}}{{else}},{{end}}
+{{"\t\t"}}{{template "CppType" .Column}} {{.Column.Name}}
+{{- end -}}
+{{"\n\t"}}){
+{{- end -}}
+{{- /*                          END OF FUNCTION PARAMETERS                      */ -}}
+{{- /*                          INITIALIZE STATEMENT                      */ -}}
+        {{""}}
+        std::string sql = "{{.Text}}";
+        sqlite3_stmt* stmt = nullptr;
+        err = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+        if (err != SQLITE_OK) {
+            Serial.printf("SQL error: %s\n", sqlite3_errmsg(db));
+            return;
+        }
+{{- /*                          END INITIALIZATION                      */ -}}
+{{- /*                          PARSE PARAMETERS                      */ -}}
+{{- range  $i, $p := .Params -}}
+        {{"\n\t\t"}}
+        {{- if eq $p.Column.Type.Name "integer" -}}
+        err = sqlite3_bind_int(stmt, {{ $i }} + 1, {{ $p.Column.Name }});
+        {{- else if eq $p.Column.Type.Name "text" -}}
+        err = sqlite3_bind_text(stmt, {{ $i }} + 1, {{ $p.Column.Name }}.c_str(), -1, SQLITE_STATIC);
+        {{- end -}}
+        {{""}}
+        if (err != SQLITE_OK) {
+            Serial.printf("SQL error: %s\n", sqlite3_errmsg(db));
+            return;
+        }{{ end }}
+
+{{- /*                          END PARSING                      */ -}}
+{{- /*                          CONSTRUCT RESULT                      */ -}}
+{{- /*                          CONSTRUCT ONE/MANY                      */ -}}
+{{- if or (eq .Cmd ":one") (eq .Cmd ":many") }}
+    {{- $cmd := .Cmd }}
+    {{- $lenCols := len .Columns }}
+        {{ $returnType }} result;
+        while (sqlite3_step(stmt) == SQLITE_ROW) {{"{\n\t\t\t"}}
+            {{- if eq $cmd ":many" }}
+            {{- $rowType }} row;
+            {{- end }}
+            {{- range $i, $c := .Columns }}
+            {{- $result := "rrr" }}
+            {{- if eq $cmd ":many" }}
+            {{- if gt $lenCols 1 -}}
+            {{- $result = printf "row.%s" $c.Name }}
+            {{- else -}}
+            {{- $result = "row" }}
+            {{- end }}
+            {{- else -}}
+            {{- if gt $lenCols 1 -}}
+            {{- $result = printf "result.%s" $c.Name }}
+            {{- else -}}
+            {{- $result = "result" }}
+            {{- end }}
+            {{- end }}
+            {{- if not $c.NotNull }}
+            if (sqlite3_column_type(stmt, {{ $i }}) != SQLITE_NULL) {
+            {{- end }}
+{{- /*                          CONSTRUCT VARIABLE TYPES                      */ -}}
+            {{- if eq $c.Type.Name "integer" }}
+            {{ $result }} = sqlite3_column_int(stmt, {{ $i }});
+            {{- else if eq $c.Type.Name "text" }}
+            {{ $result }} = std::string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, {{ $i }})));
+            {{- end }}
+            {{- if not $c.NotNull }}
+            }
+            {{- end }}
+            {{- end }}
+            {{- if eq .Cmd ":many" }}
+            result.push_back(row);
+            {{- end }}
+        }
+        sqlite3_finalize(stmt);
+        return result;{{end}}
+{{- /*                          CONSTRUCT EXEC                      */ -}}
+{{- if eq .Cmd ":exec" }}
+        err = sqlite3_step(stmt);
+        if (err != SQLITE_DONE) {
+            Serial.printf("SQL error: %s\n", sqlite3_errmsg(db));
+            return;
+        }
+        sqlite3_finalize(stmt);{{end}}
+{{- /*                          END RESULT                      */ -}}
+{{- /*                          END OF FUNCTION                      */ -}}
+    {{"\n\t}\n"}}
+{{- end -}}
+{{"\n}"}}

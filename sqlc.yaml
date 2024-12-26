@@ -1,0 +1,16 @@
+version: "2"
+plugins:
+  - name: sqlc-gen-from-template
+    process:
+      cmd: ./sqlc-gen-from-template-exec # https://github.com/fdietze/sqlc-gen-from-template
+sql:
+  - engine: "sqlite"
+    queries: "sqlc/queries.sql"
+    schema: "sqlc/schema.sql"
+    codegen:
+      - out: generated
+        plugin: sqlc-gen-from-template
+        options:
+          template: "sqlc_cpp.go.tmpl"
+          filename: "Queries.h"
+          # optional formatter command to format generated code
