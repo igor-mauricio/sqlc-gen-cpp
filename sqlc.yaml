@@ -2,7 +2,7 @@ version: "2"
 plugins:
   - name: sqlc-gen-from-template
     process:
-      cmd: ./sqlc-gen-from-template-exec # https://github.com/fdietze/sqlc-gen-from-template
+      cmd: ./sqlc-gen-from-template # https://github.com/fdietze/sqlc-gen-from-template
 sql:
   - engine: "sqlite"
     queries: "sqlc/queries.sql"

@@ -8,8 +8,8 @@ https://github.com/AugustNagro/magnum?tab=readme-ov-file
 
 {{- define "CppType" -}}
 {{- $cppType := .Type.Name -}}
-{{- if eq .Type.Name "integer"}}{{ $cppType = "int" }}
-{{- else if eq .Type.Name "text"}}{{ $cppType = "std::string" }}
+{{- if eq (upper .Type.Name) "INTEGER"}}{{ $cppType = "int" }}
+{{- else if eq (upper .Type.Name) "TEXT"}}{{ $cppType = "std::string" }}
 {{- end -}}
 {{- $cppType }}
 {{- end -}}
@@ -20,7 +20,6 @@ CREATE TABLE IF NOT EXISTS post (id INTEGER PRIMARY KEY, title TEXT, content TEX
 {{- /*                          IMPORTS                      */ -}}
 #include <sqlite3.h>
 #include <SPIFFS.h>
-#include <map>
 #include <string>
 #include <vector>
 #include <optional>
@@ -49,7 +48,7 @@ namespace repo {{"{"}}
         }
         Serial.println("Opened database successfully");
 
-        std::string sql = "{{template "schema" .}}";
+        std::string sql = "{{ oneLineSQL schema }}";
         char *errmsg;
         err = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errmsg);
         if (err != SQLITE_OK) {
@@ -123,7 +122,7 @@ namespace repo {{"{"}}
 {{- /*                          END OF FUNCTION PARAMETERS                      */ -}}
 {{- /*                          INITIALIZE STATEMENT                      */ -}}
         {{""}}
-        std::string sql = "{{.Text}}";
+        std::string sql = "{{ oneLineSQL .Text }}";
         sqlite3_stmt* stmt = nullptr;
         err = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
         if (err != SQLITE_OK) {
@@ -134,10 +133,10 @@ namespace repo {{"{"}}
 {{- /*                          PARSE PARAMETERS                      */ -}}
 {{- range  $i, $p := .Params -}}
         {{"\n\t\t"}}
-        {{- if eq $p.Column.Type.Name "integer" -}}
-        err = sqlite3_bind_int(stmt, {{ $i }} + 1, {{ $p.Column.Name }});
-        {{- else if eq $p.Column.Type.Name "text" -}}
-        err = sqlite3_bind_text(stmt, {{ $i }} + 1, {{ $p.Column.Name }}.c_str(), -1, SQLITE_STATIC);
+        {{- if eq (upper $p.Column.Type.Name) "INTEGER" -}}
+        err = sqlite3_bind_int(stmt, {{add $i 1}}, {{ $p.Column.Name }});
+        {{- else if eq (upper $p.Column.Type.Name) "TEXT" -}}
+        err = sqlite3_bind_text(stmt, {{add $i 1}}, {{ $p.Column.Name }}.c_str(), -1, SQLITE_STATIC);
         {{- end -}}
         {{""}}
         if (err != SQLITE_OK) {
@@ -175,9 +174,9 @@ namespace repo {{"{"}}
             if (sqlite3_column_type(stmt, {{ $i }}) != SQLITE_NULL) {
             {{- end }}
 {{- /*                          CONSTRUCT VARIABLE TYPES                      */ -}}
-            {{- if eq $c.Type.Name "integer" }}
+            {{- if eq (upper $c.Type.Name) "INTEGER" }}
             {{ $result }} = sqlite3_column_int(stmt, {{ $i }});
-            {{- else if eq $c.Type.Name "text" }}
+            {{- else if eq (upper $c.Type.Name) "TEXT" }}
             {{ $result }} = std::string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, {{ $i }})));
             {{- end }}
             {{- if not $c.NotNull }}
