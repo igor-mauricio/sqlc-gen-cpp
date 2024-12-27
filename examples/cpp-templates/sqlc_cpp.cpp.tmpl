@@ -12,7 +12,7 @@ https://github.com/AugustNagro/magnum?tab=readme-ov-file
     {{- else if eq (upper .Type.Name) "TEXT"}}{{ $cppType = "std::string" }}
     {{- else if eq (upper .Type.Name) "BLOB"}}{{ $cppType = "std::vector<uint8_t>" }}
     {{- else if eq (upper .Type.Name) "REAL"}}{{ $cppType = "double" }}
-    {{- else if eq (upper .Type.Name) "CHAR"}}{{ $cppType = "std::string" }}
+    {{- else if (regexMatch "^CHAR\\([0-9]+\\)$" (upper .Type.Name)) }}{{ $cppType = "std::string" }}
     {{- else if eq (upper .Type.Name) "DATE"}}{{ $cppType = "std::string" }}
     {{- else if eq (upper .Type.Name) "TIMESTAMP"}}{{ $cppType = "std::string" }}
     {{- end -}}

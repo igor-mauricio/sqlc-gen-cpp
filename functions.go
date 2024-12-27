@@ -62,6 +62,13 @@ func getFuncMap(schemaParam []string) template.FuncMap {
 			}
 			return schema
 		},
+		"regexMatch": func(pattern, s string) bool {
+			match, err := regexp.MatchString(pattern, s)
+			if err != nil {
+				log.Fatalf("Error matching regex: %v", err)
+			}
+			return match
+		},
 	}
 }
 
