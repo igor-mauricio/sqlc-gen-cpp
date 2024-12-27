@@ -1,3 +1,5 @@
 generated/
 sqlc-gen-from-template/
 sqlc-gen-from-template
+sqlc-gen-cpp2
+sqlc-gen-cpp
