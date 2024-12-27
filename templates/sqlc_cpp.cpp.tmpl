@@ -19,16 +19,10 @@ https://github.com/AugustNagro/magnum?tab=readme-ov-file
 {{- /*                          IMPORTS                      */ -}}
 #include <sqlite3.h>
 #include <SPIFFS.h>
-#include <string>
-#include <vector>
-#include <optional>
-
-#define FORMAT_SPIFFS_IF_FAILED true
+#include <sqlc_cpp.h>
 
 namespace repo {
-
     static sqlite3 *db = nullptr;
-    static int err = 0;
 
 {{- /*                          INIT DATABASE                      */ -}}
     {{"\n"}}
@@ -66,19 +60,6 @@ namespace repo {
 {{- range .Comments}}// {{.}}
 {{- end}}
 {{- $rowType := printf "%sParams" .Name -}}
-{{- if or (eq .Cmd ":many") (eq .Cmd ":one") }}
-  {{- if gt (len .Columns) 1 }}
-    {{ "typedef struct {" }}
-    {{- range .Columns }}
-        {{ if not .NotNull }}std::optional<{{end}}{{- template "CppType" . }}{{ if not .NotNull }}>{{end}} {{.Name}};
-    {{- end}}
-    } {{ $rowType }};
-  {{- else }}
-    {{"typedef "}}{{- if not (index .Columns 0).NotNull }}Option[{{end}}{{- template "CppType" (index .Columns 0) }}{{- if not (index .Columns 0).NotNull }}]{{end}}{{" "}}{{ $rowType }};
-  {{- end}}
-
-{{end}}
-
 {{- /*                          RETURN TYPE                      */ -}}
 {{- $returnType := "__DEFAULT__" -}}
 {{- if eq .Cmd ":exec" }}
@@ -93,12 +74,12 @@ namespace repo {
 
 {{- /*                          FUNCTION PARAMETERS 0                      */ -}}
 
-{{- if eq (len .Params) 0 -}}
-    {{"\t"}}{{ $returnType }} {{.Name}}(){
+{{- if eq (len .Params) 0 }}
+    {{""}}{{ $returnType }} {{.Name}}(){
 
 {{- /*                          FUNCTION PARAMETERS 1                      */ -}}
-{{- else if eq (len .Params) 1 -}}
-    {{"\t"}}{{ $returnType }} {{.Name}}({{- range $i, $p := .Params -}}{{template "CppType" .Column}} {{.Column.Name}} {{- end -}}){
+{{- else if eq (len .Params) 1 }}
+    {{""}}{{ $returnType }} {{.Name}}({{- range $i, $p := .Params -}}{{template "CppType" .Column}} {{.Column.Name}} {{- end -}}){
 
 {{- /*                          FUNCTION PARAMETERS 2+                      */ -}}
 {{- else -}}
