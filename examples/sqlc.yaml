@@ -1,0 +1,14 @@
+version: "2"
+plugins:
+  - name: sqlc-gen-from-template
+    process:
+      cmd: ../sqlc-gen-from-template # Path to the binary
+sql:
+  - engine: "sqlite"
+    queries: "sqlc/queries" # Queries folder or single file
+    schema: "sqlc/schema" # Schema folder or single file
+    codegen:
+      - out: generated # Output folder
+        plugin: sqlc-gen-from-template
+        options:
+          template: "cpp-templates" # templates folder or single file
