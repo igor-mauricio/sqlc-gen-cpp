@@ -32,7 +32,104 @@ https://github.com/AugustNagro/magnum?tab=readme-ov-file
 #define FORMAT_SPIFFS_IF_FAILED true
 
 namespace repo {
-    static int err = 0;
+/* type definitions */
+{{- range .Queries }}
+
+{{- $rowType := printf "%sParams" .Name -}}
+{{- if or (eq .Cmd ":many") (eq .Cmd ":one") }}
+  {{- if gt (len .Columns) 1 }}
+{{ "typedef struct {" }}
+{{- range .Columns }}
+    {{ if not .NotNull }}std::optional<{{end}}{{- template "CppType" . }}{{ if not .NotNull }}>{{end}} {{.Name}};
+{{- end}}
+} {{ $rowType }};
+  {{- else }}
+{{"typedef "}}{{- if not (index .Columns 0).NotNull }}Option[{{end}}{{- template "CppType" (index .Columns 0) }}{{- if not (index .Columns 0).NotNull }}]{{end}}{{" "}}{{ $rowType }};
+  {{- end}}
+{{end}}
+
+
+
+
+{{- /*                              INTERFACE CLASS                    */ -}} 
+
+
+
+{{- end }}
+class Repository {
+public:
+{{- /*                          INIT DATABASE                      */ -}}
+    {{"\n"}}
+    int err = 0;
+    virtual ~Repository() = default;
+    virtual void open(std::string filename) = 0;
+    {{""}}
+
+{{- /*                          QUERIES                      */ -}}
+{{- range .Queries }}
+
+{{- $rowType := printf "%sParams" .Name -}}
+
+
+{{- /*                          RETURN TYPE                      */ -}}
+{{- $returnType := "__DEFAULT__" -}}
+{{- if eq .Cmd ":exec" }}
+    {{- $returnType = "void" -}}
+{{- else if eq .Cmd ":many" }}
+    {{- $returnType = printf "std::vector<%s>" $rowType -}}
+{{- else if eq .Cmd ":one" }}
+    {{- $returnType = $rowType -}}
+{{- else -}}
+    {{- $returnType = "__UNKNOWN_QUERY_ANNOTATION__" -}}
+{{- end -}}
+
+{{- /*                          FUNCTION PARAMETERS 0                      */ -}}
+
+{{- if eq (len .Params) 0 -}}
+    {{"\t"}}virtual {{ $returnType }} {{.Name}}() = 0;
+
+{{- /*                          FUNCTION PARAMETERS 1                      */ -}}
+{{- else if eq (len .Params) 1 -}}
+    virtual {{ $returnType }} {{.Name}}({{- range $i, $p := .Params -}}{{template "CppType" .Column}} {{.Column.Name}} {{- end -}}) = 0;
+
+{{- /*                          FUNCTION PARAMETERS 2+                      */ -}}
+{{- else -}}
+    {{$first := true -}}
+    {{"\t"}}virtual {{ $returnType }} {{.Name}}(
+    {{- range $i, $p := .Params -}}
+    {{if $first}}{{$first = false}}{{else}},{{end}}
+        {{ if not $p.Column.NotNull }}std::optional<{{end}}
+{{- template "CppType" .Column}}
+{{- if not $p.Column.NotNull }}>{{end}} {{.Column.Name}}
+{{- end -}}
+{{"\n\t"}}) = 0;
+{{- end -}}
+{{"\n"}}
+
+{{- /*                          END OF FUNCTION PARAMETERS                      */ -}}
+
+{{- /*                          END RESULT                      */ -}}
+{{- /*                          END OF FUNCTION                      */ -}}
+{{- end -}}
+{{"\n};"}}
+
+{{- /*                          END OF INTERFACE CLASS                    */ -}}
+
+
+
+
+
+
+
+
+{{- /*                              IMPLEMENTATION CLASS                    */ -}} 
+
+
+{{- "\n" }}
+class SqliteRepository: public Repository {
+private:
+    void* database = nullptr;
+public:
 
 {{- /*                          INIT DATABASE                      */ -}}
     {{"\n"}}
@@ -43,18 +140,7 @@ namespace repo {
 {{- range .Queries }}
 
 {{- $rowType := printf "%sParams" .Name -}}
-{{- if or (eq .Cmd ":many") (eq .Cmd ":one") }}
-  {{- if gt (len .Columns) 1 }}
-    {{ "typedef struct {" }}
-    {{- range .Columns }}
-        {{ if not .NotNull }}std::optional<{{end}}{{- template "CppType" . }}{{ if not .NotNull }}>{{end}} {{.Name}};
-    {{- end}}
-    } {{ $rowType }};
-  {{- else }}
-    {{"typedef "}}{{- if not (index .Columns 0).NotNull }}Option[{{end}}{{- template "CppType" (index .Columns 0) }}{{- if not (index .Columns 0).NotNull }}]{{end}}{{" "}}{{ $rowType }};
-  {{- end}}
 
-{{end}}
 
 {{- /*                          RETURN TYPE                      */ -}}
 {{- $returnType := "__DEFAULT__" -}}
@@ -75,12 +161,12 @@ namespace repo {
 
 {{- /*                          FUNCTION PARAMETERS 1                      */ -}}
 {{- else if eq (len .Params) 1 -}}
-    {{"\t"}}{{ $returnType }} {{.Name}}({{- range $i, $p := .Params -}}{{template "CppType" .Column}} {{.Column.Name}} {{- end -}});
+    {{ $returnType }} {{.Name}}({{- range $i, $p := .Params -}}{{template "CppType" .Column}} {{.Column.Name}} {{- end -}});
 
 {{- /*                          FUNCTION PARAMETERS 2+                      */ -}}
 {{- else -}}
-    {{$first := true}}
-    {{ $returnType }} {{.Name}}(
+    {{$first := true }}
+    {{- "\t"}}{{ $returnType }} {{.Name}}(
     {{- range $i, $p := .Params -}}
     {{if $first}}{{$first = false}}{{else}},{{end}}
         {{ if not $p.Column.NotNull }}std::optional<{{end}}
@@ -96,4 +182,6 @@ namespace repo {
 {{- /*                          END RESULT                      */ -}}
 {{- /*                          END OF FUNCTION                      */ -}}
 {{- end -}}
-{{"\n}"}}
+{{"\n};"}}
+
+}

@@ -28,11 +28,19 @@ https://github.com/AugustNagro/magnum?tab=readme-ov-file
 #include <sqlc_cpp.h>
 
 namespace repo {
-    static sqlite3 *db = nullptr;
+    // sqlite3 *db = nullptr;
+
+    sqlite3* toSqlite3(void* db) {
+        return reinterpret_cast<sqlite3*>(db);
+    }
+
+    sqlite3** toSqlite3Ptr(void** db) {
+        return reinterpret_cast<sqlite3**>(db);
+    }
 
 {{- /*                          INIT DATABASE                      */ -}}
     {{"\n"}}
-    void open(std::string filename) {
+    void SqliteRepository::open(std::string filename) {
         if (!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)) {
             Serial.println("Failed to mount file system");
             return;
@@ -40,18 +48,18 @@ namespace repo {
         SPIFFS.remove("/test1.db");
 
         sqlite3_initialize();
-        err = sqlite3_open(filename.c_str(), &db);
+        err = sqlite3_open(filename.c_str(), toSqlite3Ptr(&this->database));
         if (err) {
-            Serial.printf("Can't open database: %s\n", sqlite3_errmsg(db));
+            Serial.printf("Can't open database: %s\n", sqlite3_errmsg(toSqlite3(this->database)));
             return;
         }
         Serial.println("Opened database successfully");
 
         std::string sql = "{{ oneLineSQL schema }}";
         char *errmsg;
-        err = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errmsg);
+        err = sqlite3_exec(toSqlite3(this->database), sql.c_str(), nullptr, nullptr, &errmsg);
         if (err != SQLITE_OK) {
-            Serial.printf("SQL error: %s\n", sqlite3_errmsg(db));
+            Serial.printf("SQL error: %s\n", sqlite3_errmsg(toSqlite3(this->database)));
             Serial.printf("error message: %s\n", errmsg);
             Serial.printf("error code: %d\n", err);
             return;
@@ -81,16 +89,16 @@ namespace repo {
 {{- /*                          FUNCTION PARAMETERS 0                      */ -}}
 
 {{- if eq (len .Params) 0 }}
-    {{""}}{{ $returnType }} {{.Name}}(){
+    {{""}}{{ $returnType }} SqliteRepository::{{.Name}}(){
 
 {{- /*                          FUNCTION PARAMETERS 1                      */ -}}
 {{- else if eq (len .Params) 1 }}
-    {{""}}{{ $returnType }} {{.Name}}({{- range $i, $p := .Params -}}{{template "CppType" .Column}} {{.Column.Name}} {{- end -}}){
+    {{""}}{{ $returnType }} SqliteRepository::{{.Name}}({{- range $i, $p := .Params -}}{{template "CppType" .Column}} {{.Column.Name}} {{- end -}}){
 
 {{- /*                          FUNCTION PARAMETERS 2+                      */ -}}
 {{- else -}}
     {{$first := true}}
-    {{ $returnType }} {{.Name}}(
+    {{ $returnType }} SqliteRepository::{{.Name}}(
     {{- range $i, $p := .Params -}}
     {{if $first}}{{$first = false}}{{else}},{{end}}
         {{ if not $p.Column.NotNull }}std::optional<{{end}}
@@ -106,9 +114,9 @@ namespace repo {
         {{""}}
         std::string sql = "{{ oneLineSQL .Text }}";
         sqlite3_stmt* stmt = nullptr;
-        err = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+        err = sqlite3_prepare_v2(toSqlite3(this->database), sql.c_str(), -1, &stmt, nullptr);
         if (err != SQLITE_OK) {
-            Serial.printf("SQL error: %s\n", sqlite3_errmsg(db));
+            Serial.printf("SQL error: %s\n", sqlite3_errmsg(toSqlite3(this->database)));
 
             return {{ if ne $returnType "void" }}{{$returnType}} {} {{end}};
         }
@@ -134,7 +142,7 @@ namespace repo {
         {{- end -}}
         {{""}}
         if (err != SQLITE_OK) {
-            Serial.printf("SQL error: %s\n", sqlite3_errmsg(db));
+            Serial.printf("SQL error: %s\n", sqlite3_errmsg(toSqlite3(this->database)));
             return {{ if ne $returnType "void" }}{{$returnType}} {} {{end}};
         }{{ end }}
 
@@ -204,10 +212,11 @@ namespace repo {
 {{- if eq .Cmd ":exec" }}
         err = sqlite3_step(stmt);
         if (err != SQLITE_DONE) {
-            Serial.printf("SQL error: %s\n", sqlite3_errmsg(db));
+            Serial.printf("SQL error: %s\n", sqlite3_errmsg(toSqlite3(this->database)));
             return;
         }
-        sqlite3_finalize(stmt);{{end}}
+        sqlite3_finalize(stmt);
+        err = 0;{{end}}
 
 {{- /*                          END RESULT                      */ -}}
 {{- /*                          END OF FUNCTION                      */ -}}
